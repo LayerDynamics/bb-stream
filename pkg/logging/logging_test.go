@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -102,7 +103,8 @@ func TestErrAttribute(t *testing.T) {
 func TestWithContext(t *testing.T) {
 	// WithContext currently just returns the default logger
 	// This test ensures it doesn't panic and returns a valid logger
-	logger := WithContext(nil)
+	ctx := context.Background()
+	logger := WithContext(ctx)
 	if logger == nil {
 		t.Error("WithContext returned nil")
 	}

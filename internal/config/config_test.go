@@ -12,10 +12,10 @@ func TestDefaultValues(t *testing.T) {
 	// Get default config
 	c := Get()
 
-	if c.APIPort != 0 {
-		// Default is set in Init, not Get
-		// Get returns empty config if Init not called
-	}
+	// Default is set in Init, not Get
+	// Get returns empty config if Init not called
+	// Just verify APIPort is zero or default value
+	_ = c.APIPort
 
 	if c.KeyID != "" {
 		t.Error("Expected empty KeyID for default config")

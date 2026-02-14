@@ -174,7 +174,7 @@ func (w *Watcher) removePath(path string) {
 		return
 	}
 
-	w.watcher.Remove(path)
+	_ = w.watcher.Remove(path)
 	delete(w.watching, path)
 }
 
@@ -220,7 +220,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	if event.Op&fsnotify.Create != 0 {
 		info, err := os.Stat(path)
 		if err == nil && info.IsDir() && w.opts.Recursive {
-			w.addPath(path)
+			_ = w.addPath(path)
 		}
 	}
 

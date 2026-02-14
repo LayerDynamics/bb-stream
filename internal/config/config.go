@@ -45,10 +45,10 @@ func Init() error {
 
 	// Environment variable bindings
 	viper.SetEnvPrefix("BB")
-	viper.BindEnv("key_id", "BB_KEY_ID")
-	viper.BindEnv("application_key", "BB_APP_KEY")
-	viper.BindEnv("default_bucket", "BB_DEFAULT_BUCKET")
-	viper.BindEnv("api_key", "BB_API_KEY")
+	_ = viper.BindEnv("key_id", "BB_KEY_ID")
+	_ = viper.BindEnv("application_key", "BB_APP_KEY")
+	_ = viper.BindEnv("default_bucket", "BB_DEFAULT_BUCKET")
+	_ = viper.BindEnv("api_key", "BB_API_KEY")
 
 	// Try to read config file (ignore error if doesn't exist)
 	if err := viper.ReadInConfig(); err != nil {

@@ -84,7 +84,7 @@ func cleanupOldJobs() {
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 func respondError(w http.ResponseWriter, status int, message string) {
@@ -612,7 +612,9 @@ func (s *Server) handleWatchStart(w http.ResponseWriter, r *http.Request) {
 	watchJobsMu.Unlock()
 
 	// Start watching - use background context since HTTP request will end
-	go uploader.Start(context.Background())
+	go func() {
+		_ = uploader.Start(context.Background())
+	}()
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"job_id": jobID,

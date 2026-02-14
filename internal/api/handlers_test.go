@@ -68,7 +68,7 @@ func TestHandleSyncStart_InvalidJSON(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "Invalid request body" {
 		t.Errorf("Expected 'Invalid request body' error, got '%s'", result["error"])
 	}
@@ -90,7 +90,7 @@ func TestHandleSyncStart_MissingLocalPath(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "local_path is required" {
 		t.Errorf("Expected 'local_path is required' error, got '%s'", result["error"])
 	}
@@ -112,7 +112,7 @@ func TestHandleSyncStart_MissingBucket(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "bucket is required" {
 		t.Errorf("Expected 'bucket is required' error, got '%s'", result["error"])
 	}
@@ -134,7 +134,7 @@ func TestHandleSyncStart_InvalidDirection(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "direction must be 'to_remote' or 'to_local'" {
 		t.Errorf("Expected direction error, got '%s'", result["error"])
 	}
@@ -190,7 +190,7 @@ func TestHandleWatchStart_MissingLocalPath(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "local_path is required" {
 		t.Errorf("Expected 'local_path is required' error, got '%s'", result["error"])
 	}
@@ -212,7 +212,7 @@ func TestHandleWatchStart_MissingBucket(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "bucket is required" {
 		t.Errorf("Expected 'bucket is required' error, got '%s'", result["error"])
 	}
@@ -297,7 +297,7 @@ func TestHandleAuth_InvalidJSON(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(rr.Body.Bytes(), &result)
+	_ = json.Unmarshal(rr.Body.Bytes(), &result)
 	if result["error"] != "Invalid request body" {
 		t.Errorf("Expected 'Invalid request body' error, got '%s'", result["error"])
 	}
