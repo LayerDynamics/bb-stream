@@ -6,8 +6,8 @@ credentials.json
 *.pem
 *.key
 
-# Go binaries
-bb-stream
+# Go binaries (only at root, not cmd/bb-stream/)
+/bb-stream
 *.exe
 *.exe~
 *.dll
