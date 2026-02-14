@@ -1,15 +1,20 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import type { ToastType } from '../stores/toasts';
 
-  export let id: string;
-  export let message: string;
-  export let type: ToastType = 'info';
+  interface Props {
+    id: string;
+    message: string;
+    type?: ToastType;
+    ondismiss?: (detail: { id: string }) => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    dismiss: { id: string };
-  }>();
+  let {
+    id,
+    message,
+    type = 'info',
+    ondismiss
+  }: Props = $props();
 
   const icons = {
     success: `<polyline points="20 6 9 17 4 12" />`,
@@ -33,7 +38,7 @@
   <div class="toast-message">{message}</div>
   <button
     class="toast-dismiss"
-    on:click={() => dispatch('dismiss', { id })}
+    onclick={() => ondismiss?.({ id })}
     aria-label="Dismiss"
   >
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

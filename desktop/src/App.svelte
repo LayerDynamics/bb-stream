@@ -14,6 +14,8 @@
   import SettingsModal from './lib/components/SettingsModal.svelte';
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import BackendStatusOverlay from './lib/components/BackendStatusOverlay.svelte';
+  import WelcomeScreen from './lib/components/WelcomeScreen.svelte';
+  import StatusBar from './lib/components/StatusBar.svelte';
   import { success, error as showError, info } from './lib/stores/toasts';
   import {
     uploads,
@@ -55,6 +57,7 @@
   let deleteConfirm = $state<{ open: boolean; file: ObjectInfo | null }>({ open: false, file: null });
   let backendStatus = $state<BackendStatusType>('starting');
   let backendError = $state<string | undefined>(undefined);
+  let isConfigured = $state<boolean | null>(null); // null = loading, false = show welcome, true = configured
 
   // Wait for server to be ready
   async function waitForServer(maxAttempts = 30): Promise<boolean> {
@@ -101,8 +104,8 @@
   }
 
   // Handle bucket selection
-  function handleBucketSelect(event: CustomEvent<{ bucket: string }>) {
-    currentBucket = event.detail.bucket;
+  function handleBucketSelect(detail: { bucket: string }) {
+    currentBucket = detail.bucket;
     currentPath = '';
     loadFiles();
   }
@@ -114,13 +117,13 @@
   }
 
   // Handle file drop for upload
-  async function handleFileDrop(event: CustomEvent<{ files: File[] }>) {
+  async function handleFileDrop(detail: { files: File[] }) {
     if (!currentBucket) {
       error = 'Please select a bucket first';
       return;
     }
 
-    for (const file of event.detail.files) {
+    for (const file of detail.files) {
       const remotePath = currentPath ? `${currentPath}/${file.name}` : file.name;
       const uploadId = addUpload(file.name, currentBucket, remotePath);
 
@@ -217,16 +220,16 @@
   }
 
   // Handle sync start
-  async function handleStartSync(event: CustomEvent<{
+  async function handleStartSync(detail: {
     localPath: string;
     bucket: string;
     remotePath: string;
     direction: 'to_remote' | 'to_local';
     dryRun: boolean;
     delete: boolean;
-  }>) {
+  }) {
     try {
-      const { localPath, bucket, remotePath, direction, dryRun, delete: deleteExtra } = event.detail;
+      const { localPath, bucket, remotePath, direction, dryRun, delete: deleteExtra } = detail;
       const result = await api.startSync(localPath, bucket, remotePath, direction, {
         dryRun,
         delete: deleteExtra,
@@ -246,13 +249,13 @@
   }
 
   // Handle watch start
-  async function handleStartWatch(event: CustomEvent<{
+  async function handleStartWatch(detail: {
     localPath: string;
     bucket: string;
     remotePath: string;
-  }>) {
+  }) {
     try {
-      const { localPath, bucket, remotePath } = event.detail;
+      const { localPath, bucket, remotePath } = detail;
       const result = await api.startWatch(localPath, bucket, remotePath);
 
       addWatchJob({
@@ -269,10 +272,10 @@
   }
 
   // Handle watch stop
-  async function handleStopWatch(event: CustomEvent<{ jobId: string }>) {
+  async function handleStopWatch(detail: { jobId: string }) {
     try {
-      await api.stopWatch(event.detail.jobId);
-      updateWatchJob(event.detail.jobId, { status: 'stopped' });
+      await api.stopWatch(detail.jobId);
+      updateWatchJob(detail.jobId, { status: 'stopped' });
     } catch (e: any) {
       error = e.message || 'Failed to stop watch';
     }
@@ -386,8 +389,18 @@
         console.warn('WebSocket connection failed:', e);
       }
 
-      // Load initial data
-      await loadBuckets();
+      // Check if configured
+      try {
+        const config = await api.getConfig();
+        isConfigured = config.configured;
+      } catch {
+        isConfigured = false;
+      }
+
+      // Load initial data if configured
+      if (isConfigured) {
+        await loadBuckets();
+      }
 
       // Register menu event handlers
       menuUnlisteners.push(await listen('menu-upload', () => {
@@ -456,10 +469,10 @@
     type="file"
     multiple
     bind:this={fileInput}
-    on:change={(e) => {
+    onchange={(e) => {
       const input = e.target as HTMLInputElement;
       if (input.files && input.files.length > 0) {
-        handleFileDrop({ detail: { files: Array.from(input.files) } } as CustomEvent<{ files: File[] }>);
+        handleFileDrop({ files: Array.from(input.files) });
         input.value = ''; // Reset for next upload
       }
     }}
@@ -480,19 +493,19 @@
         {buckets}
         selected={currentBucket}
         loading={loadingBuckets}
-        on:select={handleBucketSelect}
-        on:refresh={loadBuckets}
+        onselect={handleBucketSelect}
+        onrefresh={loadBuckets}
       />
 
       <div class="sidebar-panels">
         <SyncPanel
           {buckets}
-          on:startSync={handleStartSync}
+          onstartSync={handleStartSync}
         />
         <WatchPanel
           {buckets}
-          on:startWatch={handleStartWatch}
-          on:stopWatch={handleStopWatch}
+          onstartWatch={handleStartWatch}
+          onstopWatch={handleStopWatch}
         />
       </div>
 
@@ -545,7 +558,7 @@
       <!-- Drop zone -->
       <FileDropzone
         disabled={!currentBucket || !serverConnected}
-        on:drop={handleFileDrop}
+        ondrop={handleFileDrop}
       />
 
       <!-- File list -->
@@ -565,15 +578,15 @@
       <!-- Upload panel -->
       <UploadPanel
         uploads={$uploads}
-        on:remove={(e) => removeUpload(e.detail.id)}
-        on:clear={clearCompletedUploads}
+        onremove={(e) => removeUpload(e.id)}
+        onclear={clearCompletedUploads}
       />
 
       <!-- Download panel -->
       <DownloadPanel
         downloads={$downloads}
-        on:remove={(e) => removeDownload(e.detail.id)}
-        on:clear={clearCompletedDownloads}
+        onremove={(e) => removeDownload(e.id)}
+        onclear={clearCompletedDownloads}
       />
     </div>
   </div>
@@ -586,7 +599,8 @@
     open={showSettings}
     onclose={() => showSettings = false}
     onsaved={() => {
-      // Reload buckets after settings saved
+      // Mark as configured and reload buckets
+      isConfigured = true;
       loadBuckets();
     }}
   />
@@ -605,6 +619,17 @@
 
   <!-- Backend status overlay -->
   <BackendStatusOverlay status={backendStatus} error={backendError} />
+
+  <!-- Welcome screen for unconfigured state -->
+  {#if isConfigured === false}
+    <WelcomeScreen onconfigured={() => {
+      isConfigured = true;
+      loadBuckets();
+    }} />
+  {/if}
+
+  <!-- Status bar -->
+  <StatusBar connected={serverConnected} />
 </main>
 
 <style>
@@ -761,5 +786,10 @@
   .file-list-container {
     flex: 1;
     overflow: auto;
+  }
+
+  /* Account for status bar at bottom */
+  main {
+    padding-bottom: 2.5rem;
   }
 </style>

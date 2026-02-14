@@ -1,29 +1,31 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { watchJobs, removeWatchJob } from '../stores/jobs';
 
-  export let buckets: { Name: string }[] = [];
-
-  const dispatch = createEventDispatcher<{
-    startWatch: {
+  interface Props {
+    buckets?: { Name: string }[];
+    onstartWatch?: (detail: {
       localPath: string;
       bucket: string;
       remotePath: string;
-    };
-    stopWatch: {
-      jobId: string;
-    };
-  }>();
+    }) => void;
+    onstopWatch?: (detail: { jobId: string }) => void;
+  }
 
-  let localPath = '';
-  let selectedBucket = '';
-  let remotePath = '';
-  let expanded = false;
+  let {
+    buckets = [],
+    onstartWatch,
+    onstopWatch
+  }: Props = $props();
+
+  let localPath = $state('');
+  let selectedBucket = $state('');
+  let remotePath = $state('');
+  let expanded = $state(false);
 
   function handleStartWatch() {
     if (!localPath || !selectedBucket) return;
 
-    dispatch('startWatch', {
+    onstartWatch?.({
       localPath,
       bucket: selectedBucket,
       remotePath,
@@ -35,7 +37,7 @@
   }
 
   function handleStopWatch(jobId: string) {
-    dispatch('stopWatch', { jobId });
+    onstopWatch?.({ jobId });
   }
 
   function getStatusColor(status: string): string {
@@ -48,7 +50,7 @@
 </script>
 
 <div class="watch-panel">
-  <button class="panel-toggle" on:click={() => expanded = !expanded}>
+  <button class="panel-toggle" onclick={() => expanded = !expanded}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
@@ -96,7 +98,7 @@
 
         <button
           class="start-btn"
-          on:click={handleStartWatch}
+          onclick={handleStartWatch}
           disabled={!localPath || !selectedBucket}
         >
           Start Watching
@@ -112,7 +114,7 @@
               <div class="job-info">
                 <span class="status-dot" style="background: {getStatusColor(job.status)}"></span>
                 <span class="job-path">{job.localPath}</span>
-                <span class="job-arrow">→</span>
+                <span class="job-arrow">\u2192</span>
                 <span class="job-bucket">{job.bucket}/{job.remotePath || ''}</span>
               </div>
               {#if job.recentUploads && job.recentUploads.length > 0}
@@ -125,11 +127,11 @@
               {/if}
               <div class="job-actions">
                 {#if job.status === 'running'}
-                  <button class="stop-btn" on:click={() => handleStopWatch(job.id)}>
+                  <button class="stop-btn" onclick={() => handleStopWatch(job.id)}>
                     Stop
                   </button>
                 {:else}
-                  <button class="remove-btn" on:click={() => removeWatchJob(job.id)}>
+                  <button class="remove-btn" onclick={() => removeWatchJob(job.id)}>
                     Remove
                   </button>
                 {/if}

@@ -1,11 +1,21 @@
 <script lang="ts">
-  export let progress = 0;
-  export let label = '';
-  export let showPercent = true;
-  export let variant: 'default' | 'success' | 'error' = 'default';
-  export let size: 'sm' | 'md' | 'lg' = 'md';
+  interface Props {
+    progress?: number;
+    label?: string;
+    showPercent?: boolean;
+    variant?: 'default' | 'success' | 'error';
+    size?: 'sm' | 'md' | 'lg';
+  }
 
-  $: clampedProgress = Math.min(100, Math.max(0, progress));
+  let {
+    progress = 0,
+    label = '',
+    showPercent = true,
+    variant = 'default',
+    size = 'md'
+  }: Props = $props();
+
+  let clampedProgress = $derived(Math.min(100, Math.max(0, progress)));
 </script>
 
 <div class="progress-container {size}">

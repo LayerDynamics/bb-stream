@@ -1,14 +1,20 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import type { Snippet } from 'svelte';
 
-  export let disabled = false;
+  interface Props {
+    disabled?: boolean;
+    ondrop?: (detail: { files: File[] }) => void;
+    children?: Snippet;
+  }
 
-  const dispatch = createEventDispatcher<{
-    drop: { files: File[] };
-  }>();
+  let {
+    disabled = false,
+    ondrop,
+    children
+  }: Props = $props();
 
-  let isDragging = false;
-  let dragCounter = 0;
+  let isDragging = $state(false);
+  let dragCounter = $state(0);
 
   function handleDragEnter(e: DragEvent) {
     e.preventDefault();
@@ -37,7 +43,7 @@
 
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length > 0) {
-      dispatch('drop', { files });
+      ondrop?.({ files });
     }
   }
 
@@ -49,7 +55,7 @@
     input.onchange = () => {
       const files = Array.from(input.files || []);
       if (files.length > 0) {
-        dispatch('drop', { files });
+        ondrop?.({ files });
       }
     };
     input.click();
@@ -60,16 +66,18 @@
   class="dropzone"
   class:dragging={isDragging}
   class:disabled
-  on:dragenter={handleDragEnter}
-  on:dragleave={handleDragLeave}
-  on:dragover={handleDragOver}
-  on:drop={handleDrop}
-  on:click={handleClick}
-  on:keydown={(e) => e.key === 'Enter' && handleClick()}
+  ondragenter={handleDragEnter}
+  ondragleave={handleDragLeave}
+  ondragover={handleDragOver}
+  ondrop={handleDrop}
+  onclick={handleClick}
+  onkeydown={(e) => e.key === 'Enter' && handleClick()}
   role="button"
   tabindex="0"
 >
-  <slot>
+  {#if children}
+    {@render children()}
+  {:else}
     <div class="dropzone-content">
       <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -84,7 +92,7 @@
         {/if}
       </p>
     </div>
-  </slot>
+  {/if}
 </div>
 
 <style>

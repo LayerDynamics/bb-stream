@@ -1,18 +1,24 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { BucketInfo } from '../api';
 
-  export let buckets: BucketInfo[] = [];
-  export let selected: string | null = null;
-  export let loading = false;
+  interface Props {
+    buckets?: BucketInfo[];
+    selected?: string | null;
+    loading?: boolean;
+    onselect?: (detail: { bucket: string }) => void;
+    onrefresh?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    select: { bucket: string };
-    refresh: void;
-  }>();
+  let {
+    buckets = [],
+    selected = null,
+    loading = false,
+    onselect,
+    onrefresh
+  }: Props = $props();
 
   function handleSelect(bucket: string) {
-    dispatch('select', { bucket });
+    onselect?.({ bucket });
   }
 </script>
 
@@ -23,7 +29,7 @@
       class="refresh-btn"
       title="Refresh buckets"
       disabled={loading}
-      on:click={() => dispatch('refresh')}
+      onclick={() => onrefresh?.()}
     >
       <svg
         class:spinning={loading}
@@ -41,15 +47,31 @@
 
   <div class="bucket-list">
     {#if loading && buckets.length === 0}
-      <div class="loading">Loading buckets...</div>
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <span>Loading buckets...</span>
+      </div>
     {:else if buckets.length === 0}
-      <div class="empty">No buckets found</div>
+      <div class="empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+          <path d="M6 4h5v8l-2.5-1.5L6 12V4z" />
+        </svg>
+        <p class="empty-title">No buckets found</p>
+        <p class="empty-description">
+          Create a bucket in the
+          <a href="https://secure.backblaze.com/b2_buckets.htm" target="_blank" rel="noopener">
+            Backblaze B2 Console
+          </a>
+          to get started.
+        </p>
+      </div>
     {:else}
       {#each buckets as bucket (bucket.Name)}
         <button
           class="bucket-item"
           class:selected={selected === bucket.Name}
-          on:click={() => handleSelect(bucket.Name)}
+          onclick={() => handleSelect(bucket.Name)}
         >
           <svg class="bucket-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" />
@@ -169,11 +191,62 @@
     text-transform: lowercase;
   }
 
-  .loading,
-  .empty {
-    padding: 1rem;
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 2rem 1rem;
     text-align: center;
     color: var(--text-secondary, #666);
     font-size: 0.9rem;
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-color, #e0e0e0);
+    border-top-color: var(--primary-color, #1976d2);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .empty-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--text-tertiary, #bbb);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary, #666);
+  }
+
+  .empty-description {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-tertiary, #999);
+    line-height: 1.5;
+  }
+
+  .empty-description a {
+    color: var(--primary-color, #1976d2);
+    text-decoration: none;
+  }
+
+  .empty-description a:hover {
+    text-decoration: underline;
   }
 </style>

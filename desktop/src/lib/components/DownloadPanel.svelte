@@ -1,20 +1,25 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import ProgressBar from './ProgressBar.svelte';
   import type { Download } from '../stores/jobs';
 
-  export let downloads: Download[] = [];
+  interface Props {
+    downloads?: Download[];
+    oncancel?: (detail: { id: string }) => void;
+    onremove?: (detail: { id: string }) => void;
+    onclear?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    cancel: { id: string };
-    remove: { id: string };
-    clear: void;
-  }>();
+  let {
+    downloads = [],
+    oncancel,
+    onremove,
+    onclear
+  }: Props = $props();
 
-  $: activeDownloads = downloads.filter((d) => d.status === 'downloading' || d.status === 'pending');
-  $: completedDownloads = downloads.filter((d) => d.status === 'complete');
-  $: errorDownloads = downloads.filter((d) => d.status === 'error');
-  $: hasCompleted = completedDownloads.length > 0;
+  let activeDownloads = $derived(downloads.filter((d) => d.status === 'downloading' || d.status === 'pending'));
+  let completedDownloads = $derived(downloads.filter((d) => d.status === 'complete'));
+  let errorDownloads = $derived(downloads.filter((d) => d.status === 'error'));
+  let hasCompleted = $derived(completedDownloads.length > 0);
 </script>
 
 {#if downloads.length > 0}
@@ -22,7 +27,7 @@
     <div class="header">
       <h3>Downloads</h3>
       {#if hasCompleted}
-        <button class="clear-btn" on:click={() => dispatch('clear')}>
+        <button class="clear-btn" onclick={() => onclear?.()}>
           Clear completed
         </button>
       {/if}
@@ -66,7 +71,7 @@
           <button
             class="remove-btn"
             title="Remove"
-            on:click={() => dispatch('remove', { id: download.id })}
+            onclick={() => onremove?.({ id: download.id })}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />

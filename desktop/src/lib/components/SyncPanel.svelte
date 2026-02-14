@@ -1,33 +1,35 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import type { SyncJobInfo } from '../stores/jobs';
   import { syncJobs, removeSyncJob } from '../stores/jobs';
 
-  export let buckets: { Name: string }[] = [];
-
-  const dispatch = createEventDispatcher<{
-    startSync: {
+  interface Props {
+    buckets?: { Name: string }[];
+    onstartSync?: (detail: {
       localPath: string;
       bucket: string;
       remotePath: string;
       direction: 'to_remote' | 'to_local';
       dryRun: boolean;
       delete: boolean;
-    };
-  }>();
+    }) => void;
+  }
 
-  let localPath = '';
-  let selectedBucket = '';
-  let remotePath = '';
-  let direction: 'to_remote' | 'to_local' = 'to_remote';
-  let dryRun = false;
-  let deleteExtra = false;
-  let expanded = false;
+  let {
+    buckets = [],
+    onstartSync
+  }: Props = $props();
+
+  let localPath = $state('');
+  let selectedBucket = $state('');
+  let remotePath = $state('');
+  let direction = $state<'to_remote' | 'to_local'>('to_remote');
+  let dryRun = $state(false);
+  let deleteExtra = $state(false);
+  let expanded = $state(false);
 
   function handleStartSync() {
     if (!localPath || !selectedBucket) return;
 
-    dispatch('startSync', {
+    onstartSync?.({
       localPath,
       bucket: selectedBucket,
       remotePath,
@@ -48,7 +50,7 @@
 </script>
 
 <div class="sync-panel">
-  <button class="panel-toggle" on:click={() => expanded = !expanded}>
+  <button class="panel-toggle" onclick={() => expanded = !expanded}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M23 4v6h-6M1 20v-6h6" />
       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -118,7 +120,7 @@
 
         <button
           class="start-btn"
-          on:click={handleStartSync}
+          onclick={handleStartSync}
           disabled={!localPath || !selectedBucket}
         >
           Start Sync
@@ -132,9 +134,9 @@
           {#each $syncJobs as job}
             <div class="job-item">
               <div class="job-info">
-                <span class="job-direction">{job.direction === 'to_remote' ? '↑' : '↓'}</span>
+                <span class="job-direction">{job.direction === 'to_remote' ? '\u2191' : '\u2193'}</span>
                 <span class="job-path">{job.localPath}</span>
-                <span class="job-arrow">→</span>
+                <span class="job-arrow">\u2192</span>
                 <span class="job-bucket">{job.bucket}/{job.remotePath || ''}</span>
               </div>
               <div class="job-status" style="color: {getStatusColor(job.status)}">
@@ -143,8 +145,8 @@
               {#if job.progress}
                 <div class="job-progress">{job.progress}</div>
               {/if}
-              <button class="remove-btn" on:click={() => removeSyncJob(job.id)}>
-                ×
+              <button class="remove-btn" onclick={() => removeSyncJob(job.id)}>
+                \u00d7
               </button>
             </div>
           {/each}
