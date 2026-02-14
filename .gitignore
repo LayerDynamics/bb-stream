@@ -1,0 +1,52 @@
+# Credentials and secrets
+*.account.txt
+.env
+.env.*
+credentials.json
+*.pem
+*.key
+
+# Go binaries
+bb-stream
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test/coverage
+*.test
+coverage.out
+coverage.html
+
+# Go vendor (if using modules, not needed)
+# vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node.js (desktop app)
+desktop/node_modules/
+desktop/dist/
+desktop/.svelte-kit/
+
+# Tauri
+desktop/src-tauri/target/
+desktop/src-tauri/Cargo.lock
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
