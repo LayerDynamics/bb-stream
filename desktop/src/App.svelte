@@ -527,12 +527,12 @@
       <header class="content-header">
         <div class="breadcrumbs">
           {#if currentBucket}
-            <button class="breadcrumb" on:click={() => navigateToPath(0)}>
+            <button class="breadcrumb" onclick={() => navigateToPath(0)}>
               {currentBucket}
             </button>
             {#each breadcrumbs as crumb, i}
               <span class="breadcrumb-separator">/</span>
-              <button class="breadcrumb" on:click={() => navigateToPath(i + 1)}>
+              <button class="breadcrumb" onclick={() => navigateToPath(i + 1)}>
                 {crumb}
               </button>
             {/each}
@@ -551,7 +551,7 @@
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           {error}
-          <button on:click={() => (error = null)}>Dismiss</button>
+          <button onclick={() => (error = null)}>Dismiss</button>
         </div>
       {/if}
 

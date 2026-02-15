@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A production-ready Backblaze B2 cloud storage streaming application with CLI, HTTP API, and desktop GUI.
+A Backblaze B2 cloud storage streaming application with CLI, HTTP API, and desktop GUI.
 
 ## Features
 
