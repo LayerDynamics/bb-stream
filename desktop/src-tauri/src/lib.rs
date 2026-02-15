@@ -24,6 +24,7 @@ struct AppState {
     port: AtomicU16,
     is_healthy: AtomicBool,
     shutdown: AtomicBool,
+    restart_tx: Mutex<Option<mpsc::Sender<()>>>,
 }
 
 impl AppState {
@@ -33,6 +34,7 @@ impl AppState {
             port: AtomicU16::new(0),
             is_healthy: AtomicBool::new(false),
             shutdown: AtomicBool::new(false),
+            restart_tx: Mutex::new(None),
         }
     }
 }
@@ -43,11 +45,10 @@ fn get_api_port(state: tauri::State<Arc<AppState>>) -> u16 {
 }
 
 #[tauri::command]
-fn restart_backend(app: AppHandle, state: tauri::State<Arc<AppState>>) {
-    let state = Arc::clone(&state);
-    tauri::async_runtime::spawn(async move {
-        restart_sidecar(&app, &state).await;
-    });
+fn restart_backend(state: tauri::State<Arc<AppState>>) {
+    if let Some(tx) = state.restart_tx.lock().unwrap().as_ref() {
+        let _ = tx.try_send(());
+    }
 }
 
 // Find an available port
@@ -60,8 +61,8 @@ fn find_available_port() -> Option<u16> {
     portpicker::pick_unused_port()
 }
 
-// Start the sidecar process
-async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), String> {
+// Start the sidecar process - must be called from sync context
+fn start_sidecar_sync(app: &AppHandle, state: &Arc<AppState>) -> Result<(), String> {
     // Find an available port
     let port = find_available_port().ok_or("No available ports")?;
     state.port.store(port, Ordering::SeqCst);
@@ -76,7 +77,7 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
         .sidecar("bb-stream")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
 
-    let (mut rx, child) = sidecar_command
+    let (rx, child) = sidecar_command
         .args(["serve", "--port", &port.to_string()])
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
@@ -87,12 +88,25 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
         *guard = Some(child);
     }
 
-    // Create a channel for sidecar events
-    let (tx, mut event_rx) = mpsc::channel::<String>(10);
-
-    // Log sidecar output in background
+    // Spawn output handler
     let app_handle = app.clone();
     let state_clone = Arc::clone(state);
+    spawn_output_handler(app_handle, state_clone, rx);
+
+    // Spawn health check loop
+    let app_handle = app.clone();
+    let state_clone = Arc::clone(state);
+    spawn_health_checker(app_handle, state_clone);
+
+    Ok(())
+}
+
+// Spawn the output handler task
+fn spawn_output_handler(
+    app_handle: AppHandle,
+    state: Arc<AppState>,
+    mut rx: tauri_plugin_shell::process::CommandEvents,
+) {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
@@ -103,25 +117,25 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
                 CommandEvent::Stderr(line) => {
                     let msg = String::from_utf8_lossy(&line);
                     log::warn!("[bb-stream] {}", msg);
-                    let _ = tx.send(msg.to_string()).await;
                 }
                 CommandEvent::Error(err) => {
                     log::error!("[bb-stream] Error: {}", err);
-                    let _ = tx.send(format!("Error: {}", err)).await;
                 }
                 CommandEvent::Terminated(status) => {
                     log::info!("[bb-stream] Terminated with status: {:?}", status);
-                    state_clone.is_healthy.store(false, Ordering::SeqCst);
+                    state.is_healthy.store(false, Ordering::SeqCst);
 
-                    // If not shutting down, report crash
-                    if !state_clone.shutdown.load(Ordering::SeqCst) {
+                    // If not shutting down, report crash and request restart
+                    if !state.shutdown.load(Ordering::SeqCst) {
                         let error = format!("Process exited with status: {:?}", status);
                         emit_backend_status(&app_handle, BackendStatus::Crashed { error });
 
-                        // Auto-restart after a delay
+                        // Request restart via channel
                         tokio::time::sleep(Duration::from_secs(2)).await;
-                        if !state_clone.shutdown.load(Ordering::SeqCst) {
-                            restart_sidecar(&app_handle, &state_clone).await;
+                        if !state.shutdown.load(Ordering::SeqCst) {
+                            if let Some(tx) = state.restart_tx.lock().unwrap().as_ref() {
+                                let _ = tx.try_send(());
+                            }
                         }
                     }
                     break;
@@ -130,10 +144,10 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
             }
         }
     });
+}
 
-    // Start health check loop
-    let app_handle = app.clone();
-    let state_clone = Arc::clone(state);
+// Spawn the health checker task
+fn spawn_health_checker(app_handle: AppHandle, state: Arc<AppState>) {
     tauri::async_runtime::spawn(async move {
         let mut consecutive_failures = 0;
 
@@ -141,17 +155,17 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         loop {
-            if state_clone.shutdown.load(Ordering::SeqCst) {
+            if state.shutdown.load(Ordering::SeqCst) {
                 break;
             }
 
-            let port = state_clone.port.load(Ordering::SeqCst);
+            let port = state.port.load(Ordering::SeqCst);
             let health_url = format!("http://localhost:{}/health", port);
 
             match check_health(&health_url).await {
                 Ok(()) => {
                     consecutive_failures = 0;
-                    if !state_clone.is_healthy.swap(true, Ordering::SeqCst) {
+                    if !state.is_healthy.swap(true, Ordering::SeqCst) {
                         // Transitioned from unhealthy to healthy
                         emit_backend_status(&app_handle, BackendStatus::Healthy);
                     }
@@ -161,7 +175,7 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
                     log::warn!("Health check failed ({}): {}", consecutive_failures, e);
 
                     if consecutive_failures >= 3 {
-                        state_clone.is_healthy.store(false, Ordering::SeqCst);
+                        state.is_healthy.store(false, Ordering::SeqCst);
                         emit_backend_status(&app_handle, BackendStatus::Unhealthy);
                     }
                 }
@@ -170,8 +184,6 @@ async fn start_sidecar(app: &AppHandle, state: &Arc<AppState>) -> Result<(), Str
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
-
-    Ok(())
 }
 
 // Check health endpoint
@@ -190,26 +202,11 @@ async fn check_health(url: &str) -> Result<(), String> {
     }
 }
 
-// Restart the sidecar
-async fn restart_sidecar(app: &AppHandle, state: &Arc<AppState>) {
-    log::info!("Restarting BB Stream sidecar...");
-    emit_backend_status(app, BackendStatus::Restarting);
-
-    // Kill existing process
-    {
-        let mut guard = state.sidecar.lock().unwrap();
-        if let Some(child) = guard.take() {
-            let _ = child.kill();
-        }
-    }
-
-    // Wait a bit before restarting
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Start new process
-    if let Err(e) = start_sidecar(app, state).await {
-        log::error!("Failed to restart sidecar: {}", e);
-        emit_backend_status(app, BackendStatus::Crashed { error: e });
+// Kill existing sidecar process
+fn kill_sidecar(state: &Arc<AppState>) {
+    let mut guard = state.sidecar.lock().unwrap();
+    if let Some(child) = guard.take() {
+        let _ = child.kill();
     }
 }
 
@@ -218,6 +215,39 @@ fn emit_backend_status(app: &AppHandle, status: BackendStatus) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("backend-status", status);
     }
+}
+
+// Spawn the restart handler loop
+fn spawn_restart_handler(app: AppHandle, state: Arc<AppState>, mut rx: mpsc::Receiver<()>) {
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        rt.block_on(async move {
+            while let Some(()) = rx.recv().await {
+                if state.shutdown.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                log::info!("Restarting BB Stream sidecar...");
+                emit_backend_status(&app, BackendStatus::Restarting);
+
+                // Kill existing process
+                kill_sidecar(&state);
+
+                // Wait a bit before restarting
+                tokio::time::sleep(Duration::from_millis(500)).await;
+
+                // Start new process
+                if let Err(e) = start_sidecar_sync(&app, &state) {
+                    log::error!("Failed to restart sidecar: {}", e);
+                    emit_backend_status(&app, BackendStatus::Crashed { error: e });
+                }
+            }
+        });
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -331,17 +361,28 @@ pub fn run() {
 
             app.set_menu(menu)?;
 
+            // Create restart channel
+            let (restart_tx, restart_rx) = mpsc::channel::<()>(1);
+
+            // Store restart sender in state
+            let state: tauri::State<Arc<AppState>> = app.state();
+            {
+                let mut guard = state.restart_tx.lock().unwrap();
+                *guard = Some(restart_tx);
+            }
+
+            // Spawn the restart handler on a separate thread
+            let app_handle = app.handle().clone();
+            let state_clone = Arc::clone(&state);
+            spawn_restart_handler(app_handle, state_clone, restart_rx);
+
             // Start the sidecar
             let app_handle = app.handle().clone();
-            let state: tauri::State<Arc<AppState>> = app.state();
-            let state = Arc::clone(&state);
-
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_sidecar(&app_handle, &state).await {
-                    log::error!("Failed to start sidecar: {}", e);
-                    emit_backend_status(&app_handle, BackendStatus::Crashed { error: e });
-                }
-            });
+            let state_clone = Arc::clone(&state);
+            if let Err(e) = start_sidecar_sync(&app_handle, &state_clone) {
+                log::error!("Failed to start sidecar: {}", e);
+                emit_backend_status(&app_handle, BackendStatus::Crashed { error: e });
+            }
 
             Ok(())
         })
@@ -384,10 +425,10 @@ pub fn run() {
                     }
                 }
                 "documentation" => {
-                    let _ = open::that("https://github.com/ryanoboyle/bb-stream#readme");
+                    let _ = open::that("https://github.com/LayerDynamics/bb-stream#readme");
                 }
                 "github" => {
-                    let _ = open::that("https://github.com/ryanoboyle/bb-stream");
+                    let _ = open::that("https://github.com/LayerDynamics/bb-stream");
                 }
                 _ => {}
             }
@@ -397,12 +438,8 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 let state: tauri::State<Arc<AppState>> = window.state();
                 state.shutdown.store(true, Ordering::SeqCst);
-                let mut guard = state.sidecar.lock().unwrap();
-                if let Some(child) = guard.take() {
-                    let _ = child.kill();
-                    log::info!("BB Stream sidecar stopped");
-                }
-                drop(guard);
+                kill_sidecar(&state);
+                log::info!("BB Stream sidecar stopped");
             }
         })
         .run(tauri::generate_context!())
